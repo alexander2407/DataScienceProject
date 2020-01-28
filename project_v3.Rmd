@@ -1,0 +1,446 @@
+---
+title: "DASC Project Bmdataset Analysis"
+author: "Alexander Bruckner and Michael Dinhof"
+date: "3.11.2019"
+output: 
+  pdf_document: 
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+set.seed(5354818)
+library(tidyverse)
+library(ggplot2)
+```
+
+Sidenote: Executing this notebook can take, depending on the hardware, up to 3 hours
+
+# Data
+
+Here the bigmart dataset will be loaded and prepared for further operations.
+
+## Reading
+
+Reading the data from a csv file with read_delim.
+
+```{r}
+data <- read_delim("bigmart_train.csv", delim = ",")
+```
+
+Show Data and data types
+
+```{r}
+glimpse(data)
+```
+
+## Structure
+
+Changing character variables to factor
+
+```{r}
+data$Item_Fat_Content <- as.factor(data$Item_Fat_Content)
+data$Item_Type <- as.factor(data$Item_Type)
+data$Outlet_Size <- as.factor(data$Outlet_Size)
+data$Outlet_Location_Type <- as.factor(data$Outlet_Location_Type)
+data$Outlet_Type <- as.factor(data$Outlet_Type)
+glimpse(data)
+summary(data)
+```
+
+## Preperation
+
+Reducing the levels of Item Type to make sure it does work well with nnet (the simplification has no influence on rpart or randomforest)
+
+```{r}
+levels(data$Item_Type)
+
+levels(data$Item_Type) <- list("Food"=c("Breads", 
+                                        "Breakfast",
+                                        "Fruits and Vegetables",
+                                        "Snack Foods",
+                                        "Starchy Foods"),
+                               "Non-Vegan-Food"=c("Meat",
+                                             "Seafood",
+                                             "Dairy"),
+                               "Non-Fresh-Food"=c("Canned",
+                                                  "Frozen Foods"),
+                               "Drinks"=c("Hard Drinks", "Soft Drinks"),
+                               "Others"=c("Baking Goods", "Health and Hygiene","Household","Others"))
+
+levels(data$Item_Type)
+```
+
+# Visualization and Aggregation of the data
+
+## Visualization
+
+### Item Visibility
+
+It might be interesting to relate visibility to the sales
+
+```{r}
+g <- ggplot(data) +
+  aes(x = Item_Visibility,y = Item_Outlet_Sales,shape=Outlet_Location_Type) +
+  geom_point(aes(col=Outlet_Type))+
+  ggtitle("Item Visibility vs Item Sales of BMData",subtitle = paste0("N = ",nrow(data))) +
+  guides(col="legend") +
+  scale_color_discrete(name="Outlet Type") +
+  scale_shape(name="Outlet Location Type") +
+  scale_fill_brewer(type = "qual",palette=6)
+g
+```
+
+It is seems that the Outlet Type influences Item Outlet Sales. To further look at this a Boxplot is used
+
+```{r}
+ggplot(data,aes(x=Outlet_Type,y=Item_Outlet_Sales))+
+  geom_boxplot()+
+  ggtitle("Item Outlet Sales by Outlet Type of BMData",subtitle = paste0("N = ",nrow(data))) +
+  coord_flip()+
+  ylab(label="Item Outlet Sales")+
+  xlab(label = "Outlet Type")
+```
+
+Here it is visible that Supermarket Type 3 has a higher median and upper quartile than the other types, especially Grocery Store.
+
+It might also be interesting to look at how Visibility influences the Sales
+
+For that we calculate the linear Regression to write into the graph 
+
+```{r}
+lm(Item_Outlet_Sales ~ Item_Visibility, data=data)
+```
+
+geom_point(alpha=0.3) is used to show via color where the concentration of points is higher
+
+```{r}
+g2 <- ggplot(data,aes(x=Item_Visibility,y=Item_Outlet_Sales))+geom_point(alpha=0.3)+
+  geom_smooth(method = lm) + 
+  annotate("label",x=0.2,y=12000,label="Sales = 2463 - 4254*Visibility") +
+  ggtitle("Item Sales vs Item Visibility of BMData with lm",subtitle = paste0("N = ",nrow(data)))
+g2
+```
+
+According to the data: The less visible an item is the more Sales there are for this item. The reason behind this might be because items in a Supermarket are classified as less visible than items in a grocery store. It might be better to group it by the different Outlet Types
+
+```{r}
+g2 + 
+  facet_wrap(~Outlet_Type) +
+  ggtitle("Item Sales vs Item Visibility grouped by Outlet Type of BMData with lm",subtitle = paste0("N = ",nrow(data)))
+```
+
+It seems that Visibility is generally a bit lower in the Supermarkets compared to the Grocery Stores: Only Grocery Stores have Items with Visibility > 0.2
+
+It seems like Visibility does not have a strong Influence over the Sales, neither in general nor grouped by the Outlet Type
+
+### Item MRP
+
+Now the same logic for MRP
+
+```{r}
+g3 <- ggplot(data) +
+  aes(x = Item_MRP,y = Item_Outlet_Sales,shape=Outlet_Location_Type) +
+  geom_point(aes(col=Outlet_Type))+
+  ggtitle("Item MRP vs Item Sales of BMData",subtitle = paste0("N = ",nrow(data))) +
+  guides(col="legend") +
+  scale_color_discrete(name="Outlet Type") +
+  scale_shape(name="Outlet Location Type") +
+  scale_fill_brewer(type = "qual",palette=6)
+g3
+```
+
+It seems that more expensive Items are sold better than cheaper items
+
+```{r}
+lm(Item_Outlet_Sales ~ Item_MRP, data=data)
+```
+
+geom_point(alpha=0.3) is used to show via color where the concentration of points is higher
+
+```{r}
+g4 <- ggplot(data,aes(x=Item_MRP,y=Item_Outlet_Sales))+geom_point(alpha=0.3)+
+  geom_smooth(method = lm) + 
+  annotate("label",x=70,y=10000,label="Sales = -11.58 + 15.55*MRP") +
+  ggtitle("Item Price vs Item Sales of BMData with lm",subtitle = paste0("N = ",nrow(data)))
+g4
+```
+
+According to the data: The more expensive an item is the more Sales there are for this item. The reason behind this might be brand articles and the assumed quality of a higher price. Another reason might be, that there are more low-priced items than high-priced ones. So the sales can be more distributed in the cheaper section, compared to the more expensive one.
+
+## Aggregation of Data
+
+```{r}
+data %>%
+  group_by(Outlet_Type) %>%
+  summarise(avg_sales=mean(Item_Outlet_Sales),
+            med_sales=median(Item_Outlet_Sales),
+            max_sales=max(Item_Outlet_Sales),
+            min_sales = min(Item_Outlet_Sales),
+            avg_mrp = mean(Item_MRP),
+            med_mrp = median(Item_MRP),
+            N=n())
+```
+
+It seems that the Outlet Type has influence on the Number of Sales, especially Grocery Store has a lower average and median. There is practically no difference in MRP.
+
+The most observations are from Supermarket Type1
+
+```{r}
+data %>%
+  group_by(Outlet_Location_Type) %>%
+  summarise(avg_sales=mean(Item_Outlet_Sales),
+            med_sales=median(Item_Outlet_Sales),
+            max_sales=max(Item_Outlet_Sales),
+            min_sales = min(Item_Outlet_Sales),
+            avg_mrp = mean(Item_MRP),
+            med_mrp = median(Item_MRP),
+            N=n())
+```
+
+Outlet Location Type: Tier 1 has a lower average and median than the other two, while Tier 3 has a much higher maximum than the other 2. There is practically no difference in MRP.
+
+```{r}
+data %>%
+  group_by(Outlet_Type,Outlet_Location_Type) %>%
+  summarise(avg_sales=mean(Item_Outlet_Sales),
+            med_sales=median(Item_Outlet_Sales),
+            max_sales=max(Item_Outlet_Sales),
+            min_sales = min(Item_Outlet_Sales),
+            avg_mrp = mean(Item_MRP),
+            med_mrp = median(Item_MRP),
+            N=n())
+```
+
+Outlet Type seems to be a stronger influence on Sales compared to Outlet Location Type. There is practically no difference in MRP.
+
+
+
+# Machine Learning
+
+Loading necessary libraries
+
+```{r, message=FALSE}
+library(randomForest)
+library("nnet")
+library("keras")
+library(class)
+library("caret")
+library("e1071")
+library("rpart")
+```
+
+In this section we attempt to predict the value for Item Outlet Sales. As Input the model uses most of the other values (except the IDs).
+
+Different Models (RandomForest, RPart, NNet) are tuned and the MSE is calculated and compared. The best model will be used for further excersises.
+
+## Structuring Data
+
+Removing Item and Store Identifier since these are IDs and would not be beneficial for the Machine Learning Algorithms
+
+And removing NA-Rows, NNet can not work with NAs
+
+```{r}
+head(data)
+
+mlData <- select(data, -Item_Identifier, -Outlet_Identifier)
+mlData <- na.omit(mlData)
+nrow(mlData)
+```
+
+## Preparing test and train data
+
+1. Taking random 2/3 for train-data and 1/3 for test-data
+
+2. Scaling the numerical data
+
+3. Encoding data in seperate variable for tensorflow
+
+```{r}
+N = nrow(mlData)
+train_ind = sample(1:N, size = N*2/3)
+train = mlData[train_ind,] #zufällige 2/3 fürs trainieren abspeichern (erst ab hier skalieren, nicht vorher)
+test = mlData[-train_ind,] #zufällige 1/3 fürs testen abspeichern
+nrow(train)
+pp = preProcess(train, method = c("center","scale"))
+
+train_scaled = predict(pp, train)
+test_scaled = predict(pp, test)
+str(test_scaled)
+
+encoder = dummyVars(~Item_Fat_Content+Item_Type+Outlet_Size+Outlet_Location_Type+Outlet_Type,data=train_scaled,fullRank = TRUE)
+
+encoded_train = as.data.frame(predict(encoder,train_scaled))
+encoded_train = cbind(encoded_train,train_scaled[,c(1,3,5,6)])
+
+encoded_test = as.data.frame(predict(encoder,test_scaled))
+encoded_test = cbind(encoded_test,test_scaled[,c(1,3,5,6)])
+
+str(encoded_train)
+str(encoded_test)
+```
+
+## Tuned models
+
+### RandomForest
+
+Tuning Randomforest and showing result
+
+```{r}
+rforest_tuned = tune.randomForest(Item_Outlet_Sales ~., data = train_scaled, ntree = 1:10*1000 ,tunecontrol = tune.control(sampling="fix", nrepeat=3)) 
+rforest_tuned
+plot(rforest_tuned)
+```
+
+RandomForest is best at 4000 Trees
+
+### Nnet
+
+Tuning NNet
+
+```{r}
+nnet_tuned = tune.nnet(Item_Outlet_Sales ~ ., data = train_scaled, size = 1:15*50, tunecontrol = tune.control(sampling="fix", nrepeat=3), MaxNWts = 100000, linout=TRUE)
+nnet_tuned
+nnet_tuned$best.model
+plot(nnet_tuned)
+```
+
+NNet is best at 50 Nodes
+
+### RPart
+
+Tuning RPart
+
+```{r}
+rpart_tuned = tune.rpart(Item_Outlet_Sales ~ ., data = train_scaled, minsplit = 10:50*5, tunecontrol = tune.control(sampling="fix", nrepeat=3))
+rpart_tuned
+plot(rpart_tuned)
+
+```
+
+Changing Minsplit does not worsen or improve the process
+
+## Predict Test Data
+
+Predicting test data
+
+```{r}
+fitted_rf = predict(rforest_tuned$best.model, test_scaled)
+fitted_nnet = predict(nnet_tuned$best.model, test_scaled)
+fitted_rpart = predict(rpart_tuned$best.model, test_scaled)
+```
+
+### MSE with scaled test data
+
+Calculating Mean Squared Error with a function to show the error of the models and find the best one
+
+```{r}
+mse <- function(real,pred) {
+  return(mean((real-pred)^2))
+}
+
+cm_rf <- mse(fitted_rf, test_scaled$Item_Outlet_Sales)
+cm_rpart <- mse(fitted_rpart, test_scaled$Item_Outlet_Sales)
+cm_nnet <- mse(fitted_nnet, test_scaled$Item_Outlet_Sales)
+```
+
+### MSE of Random Forest
+
+```{r}
+cm_rf
+```
+
+### MSE of NNet
+
+```{r}
+cm_nnet
+```
+
+### MSE of RPart
+
+```{r}
+cm_rpart
+```
+
+### Model to choose
+
+The Mean squared error of RandomForest is the lowest with 0.57, NNet has a msq of 0.99 and RPart has 0.59. The best model is RandomForest.
+
+```{r}
+importance(rforest_tuned$best.model)
+```
+
+According to RandomForest the most important variable is Item_MRP (Price) while the Outlet Type is not as important.
+
+Predicting some values of the testdata, to do this the predicted values need to be put in the same dataframe as the testdata was and unscaled (this procedure is also used in api server.R). Then it can be compared to unscaled real values.
+
+```{r}
+unPreProc <- function(preProc, data){
+  stopifnot(class(preProc) == "preProcess")
+  stopifnot(class(data) == "data.frame")
+  for(i in names(preProc$mean)){
+    tmp <- data[, i] * preProc$std[[i]] + preProc$mean[[i]]
+    data[, i] <- tmp
+  }
+  return(data)  
+}
+
+predictions <- cbind(test_scaled[1:5,1:9],Item_Outlet_Sales=predict(rforest_tuned$best.model, test_scaled[1:5,]))
+
+comparison <- cbind(real=head(test["Item_Outlet_Sales"],5),predicted=unPreProc(pp,predictions)["Item_Outlet_Sales"],diff=abs(head(test["Item_Outlet_Sales"],5)-unPreProc(pp,predictions)["Item_Outlet_Sales"]))
+colnames(comparison)<-c("real","pred","abs_diff")
+comparison
+```
+
+As can be seen by these examples the difference is quite high. This is to be expected because of the high MSE Value
+
+# Deploying the best Model as API-Function
+
+Saving the RandomForest model, the PreProcess for scaling new data and the scaled data to use in an API
+
+PreProcess is necessary to scale the data given to the API 
+
+The Scaled Data is necessary to ensure that the data given to the API has the same Levels as the test data, otherwise it does not work
+
+```{r}
+model <- rforest_tuned$best.model
+save(model,file="model.rda")
+save(pp,file="preprocess.rda")
+save(train_scaled,file="df_for_levels.rda")
+```
+
+The API Logic is in the server.R file. The Client for testing in client.R.
+
+The client sends a dataframe as JSON String to the Server. 
+The server does the following:
+
+1. creates out of that a dataframe again
+
+2. scales it 
+
+3. predicts the value for Item Sales
+
+4. unscales it 
+
+5. sends it back to the client as String
+
+It is important that the client adds a value for Sales Output to the data he sends, because it is needed for the predict function, as can be seen in the importance-function above, it is not used in the model.
+
+# Special Feature
+
+As a special feature shiny is used to create an interactive Visualization of the data. The files are in the folder "shiny".
+
+In this Interface the different visualizations can be shown with a chosen number of random observations to see a less busy graphic than in the ones in this report. 
+
+# Files
+
+Dashboard - Presentation of the project, needs various jpg files that are included in the dashboard
+
+shiny - The files in the shiny directory are the server and the ui file for shiny
+
+API - The files in the API directory are the server, the client and files that need to be loaded by the server to work, these files and server.R need to be in the working directory in which the server is executed, or the paths in the server.R and start_server.R files need to be adapted
+
+project_v3.Rmd/pdf - The main project

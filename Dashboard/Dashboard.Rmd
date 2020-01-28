@@ -1,0 +1,139 @@
+---
+title: "Project Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+```
+
+# Projektbeschreibung {data-orientation=rows}
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Projektbeschreibung
+
+
+Mit dem Dataset "bigmart" von Kaggle wurden folgende Operationen und Auswertungen vorgenommen:
+
+
+- Datenaufbereitung
+- Explorative Datenanalyse, Visualisierung
+- Modellierung (Klassifikation / Regression) mit 3 Modellen
+
+Row {data-height=1500}
+-----------------------------------------------------------------------
+
+### Aufbereiteter Datensatz - Ausschnitt
+
+Item_Identifier Item_Weight Item_Fat_Content  Item_Visibility Item_Type           Item_MRP    Outlet_Identifier
+--------------- ----------- ---------------- ---------------- ------------------ -----------  -----------------
+  FDA15	          9.300	      Low Fat	        0.01604730	     Non-Vegan-Food	  249.8092	  OUT049	
+  DRC01	          5.920	      Regular	        0.01927822	    Drinks	          48.2692	    OUT018	
+  FDN15	          17.500	    Low Fat	        0.01676007	    Non-Vegan-Food	  141.6180	  OUT049	
+  FDX07	          19.200	    Regular	        0.00000000	    Food	            182.0950	  OUT010	
+  NCD19	          8.930	      Low Fat	        0.00000000	    Others	          53.8614	    OUT013	
+  FDP36	          10.395	    Regular	        0.00000000	    Others	          51.4008	    OUT018
+--------------- ----------- ---------------- ---------------- ------------------ -----------  -----------------
+
+
+Outlet_Establishment_Year Outlet_Size Outlet_Location_Type Outlet_Type              Item_Outlet_Sales
+------------------------- ----------- -------------------- ------------------------ -----------------
+  1999	                    Medium	    Tier 1	             Supermarket Type1	    3735.1380
+  2009	                    Medium	    Tier 3	             Supermarket Type2	    443.4228
+  1999	                    Medium	    Tier 1	             Supermarket Type1	    2097.2700
+  1998	                    NA	        Tier 3	             Grocery Store	        732.3800
+  1987	                    High	      Tier 3	             Supermarket Type1	    994.7052
+  2009	                    Medium     	Tier 3	             Supermarket Type2	    556.6088
+------------------------- ----------- -------------------- ------------------------ -----------------
+
+
+
+# Visualisierung relevanter Merkmale {data-orientation=rows}
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Zusammenhang von Visibility und Sales {data-height=1200}
+
+![](.\visibilityItemPriceItemSales.JPG)
+
+### Zusammenhang von MRP (Maximum Retail Price) und Sales {data-height=1000}
+
+![](.\MRPItemPriceItemSales.JPG)
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Datenaggregation {data-height=560}
+
+Outlet_Type         avg_sales   med_sales   max_sales   min_sales   avg_mrp       med_mrp        N
+------------------ ----------- ----------- ----------- ----------- -----------  --------------- -----
+Grocery Store	      339.8285	  256.9988	  1775.689	  33.2900	    140.2947	    143.9128	    1083
+Supermarket Type1	  2316.1811	  1990.7420	  10256.649	  73.2380	    141.2139	    143.1154	    5577
+Supermarket Type2	  1995.4987	  1655.1788	  6768.523	  69.2432	    141.6786	    140.5667	    928
+Supermarket Type3	  3694.0386	  3364.9532	  13086.965	  241.6854	  139.8018	    143.7154	    935
+------------------ ----------- ----------- ----------- ----------- -----------  --------------- -----
+
+Column {data-width=200}
+-----------------------------------------------------------------------
+
+### Interpretation 
+
+Es hat den Anschein, dass Outlet Type Einfluss auf die Verkaufszahlen hat. "Grocery Store" hat einen deutlich niedrigeren Durchschnitt und Median beim Verkauf. An der rechten Grafik kann man einen Zusammenhang zwischen den Verkaufszahlen und dem Item MRP vermuten, ebenso wir impliziert, dass mehr teure als billige Artikel verkauft werden.
+
+Die meisten Beobachtungen stammen von "Supermarket Type1".
+
+
+# Modellierung {data-orientation=rows}
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### RForest Performanz
+
+![](.\performanceRForest.JPG)
+
+
+
+### NodePurities von RForest {data-height=750}
+
+
+
+Node Purities
+------------------------- -----------
+Item_Weight               309.22428
+Item_Fat_Content          75.47039
+Item_Visibility           324.23787
+Item_Type                 116.56007
+Item_MRP                  1668.40833
+Outlet_Establishment_Year 49.63577
+Outlet_Size               35.72257
+Outlet_Location_Type      36.79250
+Outlet_Type               13.34441
+------------------------- -----------
+
+RForest zufolge ist Item_MRP die wichtigste Variable.
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### MSE (Mean Squared Error) aller Models
+
+Model     MSE
+--------- -------------
+RForest     0.5682681
+NNet        0.706763
+RPart       0.5866074
+--------- -------------
+
+### Bestes Model
+
+Der Mean Squared Error von RandomForest hat den geringsten Wert mit 0.568, NNet weißt einen Fehler von 0.706 auf und RPart von 0.586. Das beste Model wurde mit RandomForest erstellt, darum wurde dieses weiterverwendet.
+
+                  
